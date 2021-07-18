@@ -1,6 +1,7 @@
 import pickle
 import socket
 import threading
+from typing import Tuple
 import rsa
 from Crypto.Cipher import AES
 
@@ -17,8 +18,6 @@ nicknames=[]
 
 server_symetric_key= pickle.dumps("This is the key!")  # Each client will get this key, after it will be encrypted with asymetric encryption
 
-(public_key,private_key) = pickle.load(open("shared.pkl", "rb")) # Gets the encryption keys
-
 def broadcast(message):
     for client in clients:
         client.send(message)
@@ -33,9 +32,14 @@ def handle(client):
             clients.remove(client)
             client.close()
             nickname=nicknames[index]
-            broadcast(f"{nickname} has Disconnected from the server \n")
+            broadcast(aes_encryption(f"{nickname} has Disconnected from the server \n"))
             nicknames.remove(nickname)
 
+def aes_encryption(plain_text)->Tuple:
+    cipher = AES.new(pickle.loads(server_symetric_key).encode('utf-8'), AES.MODE_EAX)   # Encrypt the sent message
+    nonce = cipher.nonce
+    ciphertext, tag = cipher.encrypt_and_digest(plain_text.encode('utf-8'))
+    return pickle.dumps((ciphertext,nonce,tag))  #  The tuple is all the data that is needed for the decryption. It is converted to Bytes to be sent
 
 def main():
     while True:
@@ -55,10 +59,8 @@ def main():
 
         encrypted_symetric_key= rsa.encrypt(server_symetric_key,client_public_key)  # Pass the symetric (encrypted) key to the client
         client.send(encrypted_symetric_key)
-
-        # TODO: fix the welcome msg to be emcrypted
-        #broadcast((f"{nickname} has connected to the server \n").encode('utf-8'))
-        #client.send("Connected to the server \n".encode('utf-8'))
+        
+        broadcast(aes_encryption(f"{nickname} has connected to the server \n")) # Send the encrypted welcome message to all the connected users 
 
         thread= threading.Thread(target=handle, args=(client,))
         thread.start()

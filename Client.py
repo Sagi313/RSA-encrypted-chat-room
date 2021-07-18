@@ -8,19 +8,19 @@ from typing import Tuple
 from Crypto.Cipher import AES
 import rsa
 
-the_hostIP = socket.gethostname()    # My local IP adress
-the_port = 5555
+host_ip = socket.gethostname()    # My local IP adress
+host_port = 5555
 
 class Client:
     def __init__(self,hostIP,port):
-        self.sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        self.sock.connect((hostIP,port))
-
         msg=tkinter.Tk()
         msg.withdraw()
 
         self.nickname= simpledialog.askstring("Nickname", "please choose a nickaname", parent=msg)  # First popup Window
         (self.public_key,self.private_key)=rsa.newkeys(512) # Will be used for encryption. for now, no Diffie-Hellamn is implemented
+        
+        self.sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        self.sock.connect((hostIP,port))
 
         self.gui_done = False
         self.running = True
@@ -114,4 +114,4 @@ class Client:
                 self.sock.close()
                 break
 
-client= Client(the_hostIP,the_port)  
+client= Client(host_ip,host_port)  
