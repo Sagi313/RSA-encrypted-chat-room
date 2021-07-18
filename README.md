@@ -1,5 +1,5 @@
 # RSA-encrypted-chat-room
-![enter image description here](https://img.shields.io/badge/Version-Alpha-green)
+![enter image description here](https://img.shields.io/badge/Version-Beta-green)
 
 This is a public chat room where you can talk to other people safely.
 This project was for me to exercise some basic networking and encryption principles.
