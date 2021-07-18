@@ -56,7 +56,7 @@ class Client:
         self.send_button = tkinter.Button(self.window, text="send", command = self.write, image = self.button_img, highlightthickness = 0, bd = 0)
         self.send_button.pack()
 
-        self.chat_label = tkinter.Label(self.window,text="@Made by- Sagi Buria", font=("Times", 8))
+        self.chat_label = tkinter.Label(self.window,text="@Github- Sagi313", font=("Times", 8))
         self.chat_label.pack(anchor='w')
 
         self.gui_done=True
