@@ -1,27 +1,26 @@
 import pickle
 import socket
 import threading
+import tkinter
 import tkinter.scrolledtext
 from tkinter import simpledialog
-import tkinter as tk
+from typing import Tuple
+from Crypto.Cipher import AES
 import rsa
-
 
 the_hostIP = socket.gethostname()    # My local IP adress
 the_port = 5555
-
-(public_key,private_key) = pickle.load(open("shared.pkl", "rb")) # Gets the encryption keys
-
 
 class Client:
     def __init__(self,hostIP,port):
         self.sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         self.sock.connect((hostIP,port))
 
-        nickname_popup=tk.Tk()
-        nickname_popup.withdraw()
+        msg=tkinter.Tk()
+        msg.withdraw()
 
-        self.nickname= simpledialog.askstring("Nickname", "please choose a nickaname", parent=nickname_popup)  # First popup Window
+        self.nickname= simpledialog.askstring("Nickname", "please choose a nickaname", parent=msg)  # First popup Window
+        (self.public_key,self.private_key)=rsa.newkeys(512) # Will be used for encryption. for now, no Diffie-Hellamn is implemented
 
         self.gui_done = False
         self.running = True
@@ -33,67 +32,86 @@ class Client:
         receive_thread.start()
 
     def gui_loop(self):
-        self.window=tk.Tk()
-        self.window.title("RSA Encrypted Chat")
-        self.window.configure()
+        self.win=tkinter.Tk()
+        self.win.configure()
 
-        self.chat_label= tk.Label(self.window,text="chat")
+        self.chat_label= tkinter.Label(self.win,text="chat")
         self.chat_label.pack(padx=20,pady=5)
 
-        self.text_area=tkinter.scrolledtext.ScrolledText(self.window)
+        self.text_area=tkinter.scrolledtext.ScrolledText(self.win)
         self.text_area.pack(padx=20,pady=5)
         self.text_area.config(state='disabled') # So the user won't be able to change the chat history
 
 
         
-        self.input_area=tk.Text(self.window,height=3)
+        self.input_area=tkinter.Text(self.win,height=3)
         self.input_area.pack(padx=20,pady=5)
 
-        self.send_button= tk.Button(self.window, text="send",command=self.send)
+        self.send_button= tkinter.Button(self.win, text="send",command=self.write)
         self.send_button.pack()
 
 
         self.gui_done=True
-        self.window.mainloop()
+        self.win.mainloop()
 
-    def send(self):
-        message = f"{self.nickname}: {self.input_area.get('1.0','end')}"
+    def write(self):
+        message = f"{self.nickname}: {self.input_area.get('1.0','end')}"    # Create the message template like this- "Nickname: text"
+        
+        cipher = AES.new(self.symetric_key, AES.MODE_EAX)   # Encrypt the sent message
+        nonce = cipher.nonce
+        ciphertext, tag = cipher.encrypt_and_digest(message.encode('utf-8'))
 
-        #encrypt_message=rsa.encrypt(message.encode('utf-8'),public_key) ####
-        #decrypt_message=rsa.decrypt(encrypt_message,private_key)        
+        tupled_data = pickle.dumps((ciphertext,nonce,tag))  #  The tuple is all the data that is needed for the decryption. It is converted to Bytes to be sent
+        self.sock.send(tupled_data)
 
-        self.sock.send(message.encode('utf-8'))
-        self.input_area.delete('1.0','end') # Cleaning the input text box when sending
+        self.input_area.delete('1.0','end') # Clears the input field
     
+    def stop(self):
+        self.running=False
+        self.win.destroy()
+        self.sock.close()
+        exit(0)
 
     def receive(self):
         while self.running:
             try:
-                message = self.sock.recv(1024).decode('utf-8')
-                #message = self.sock.recv(1024)
-                #message=rsa.decrypt(message, private_key).decode('utf-8')
-                #decrypt_message=rsa.decrypt(message,private_key)
-                
+                message = pickle.loads(self.sock.recv(1024))
+
                 if message == 'NICK':
-                    self.sock.send(self.nickname.encode('utf-8'))
-                else:
+                    self.sock.send(pickle.dumps(self.nickname))
+                
+                elif message == 'PUBLIC KEY':
+                    public_key_in_bytes=pickle.dumps(self.public_key) # RSA moudle gives the key as an object. To send it, we need to convert it to Bytes
+                    self.sock.send(public_key_in_bytes)
+
+                    wait_for_symetric_key = True
+                    while wait_for_symetric_key:   
+                        message = self.sock.recv(1024)
+                        self.symetric_key = pickle.loads(rsa.decrypt(message,self.private_key)).encode('utf-8')
+                        wait_for_symetric_key = False
+                        
+                
+                elif type(message) is tuple:  # (ciphertext,nonce,tag)- Is the tuple object
+                    
+                    cipher = AES.new(self.symetric_key, AES.MODE_EAX, nonce=message[1])
+                    plaintext = cipher.decrypt(message[0])
+                    try:
+                        cipher.verify(message[2])
+                        print("The message is authentic:", plaintext)
+                    except ValueError:
+                        print("Key incorrect or message corrupted")
+
                     if self.gui_done:
                         self.text_area.config(state='normal')
-                        self.text_area.insert('end',message)
+                        self.text_area.insert('end',plaintext)
                         self.text_area.yview('end')
                         self.text_area.config(state='disabled')
+
             except ConnectionAbortedError:
                 break
             except:
                 print("Error")
                 self.sock.close()
                 break
-
-    def stop(self):
-        self.running=False
-        self.window.destroy()
-        self.sock.close()
-        exit(0)
-
 
 client= Client(the_hostIP,the_port)  
